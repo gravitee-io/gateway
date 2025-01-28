@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The Gravitee team (http://gravitee.io)
+ * Copyright (C) 2015 The Gravitee team (http://gravitee.io)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,35 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-:host {
-  display: flex;
-  justify-content: center;
-}
+import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
 
-.log-in {
-  display: flex;
-  width: 500px;
-  flex-flow: column;
-  gap: 32px;
+export const passwordMatchValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+  const password = control.parent?.get('password');
+  const confirmedPassword = control.parent?.get('confirmedPassword');
 
-  &__form {
-    display: flex;
-    flex-flow: column;
-    gap: 12px;
-
-    &__fields {
-      display: flex;
-      flex-flow: column;
-    }
-
-    &__buttons {
-      display: flex;
-      flex-flow: column;
-      gap: 16px;
-    }
-
-    &__submit {
-      width: 100%;
-    }
+  if (password?.value != null && confirmedPassword?.value != null && password.value !== confirmedPassword.value) {
+    return { passwordMismatch: true };
   }
-}
+  return null;
+};
