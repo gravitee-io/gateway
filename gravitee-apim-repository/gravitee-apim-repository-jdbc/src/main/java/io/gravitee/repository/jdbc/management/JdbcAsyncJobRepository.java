@@ -53,7 +53,8 @@ public class JdbcAsyncJobRepository extends JdbcAbstractCrudRepository<AsyncJob,
                     getOrm().getRowMapper(),
                     sourceId
                 );
-            return jobs.stream().findFirst();
+            var job = jobs.stream().findFirst();
+            return job.isPresent() ? Optional.of(handleDeadLine(job.get())) : job;
         } catch (final Exception ex) {
             final String message = "Failed to find pending AsyncJob for: " + sourceId;
             LOGGER.error(message, ex);
@@ -75,6 +76,18 @@ public class JdbcAsyncJobRepository extends JdbcAbstractCrudRepository<AsyncJob,
             return getResultAsPage(pageable, jobs);
         } catch (final Exception ex) {
             final String message = "Failed to search AsyncJob with: " + criteria;
+            LOGGER.error(message, ex);
+            throw new TechnicalException(message, ex);
+        }
+    }
+
+    @Override
+    public void delay(String id, Date newDeadLine) throws TechnicalException {
+        LOGGER.debug("JdbcAsyncJobRepository.delay({}, {})", id, newDeadLine);
+        try {
+            jdbcTemplate.update("update " + tableName + " set updated_at = ?, dead_line = ? where id = ?", new Date(), newDeadLine, id);
+        } catch (final Exception ex) {
+            final String message = "Failed to delay AsyncJob: " + id;
             LOGGER.error(message, ex);
             throw new TechnicalException(message, ex);
         }
@@ -122,6 +135,7 @@ public class JdbcAsyncJobRepository extends JdbcAbstractCrudRepository<AsyncJob,
             .addColumn("upper_limit", Types.INTEGER, Long.class)
             .addColumn("created_at", Types.TIMESTAMP, Date.class)
             .addColumn("updated_at", Types.TIMESTAMP, Date.class)
+            .addColumn("dead_line", Types.TIMESTAMP, Date.class)
             .build();
     }
 
@@ -134,10 +148,7 @@ public class JdbcAsyncJobRepository extends JdbcAbstractCrudRepository<AsyncJob,
         criteria.status().ifPresent(status -> clauses.add("status = ?"));
         criteria.sourceId().ifPresent(sourceId -> clauses.add("source_id = ?"));
 
-        if (!clauses.isEmpty()) {
-            return String.join(" AND ", clauses);
-        }
-        return null;
+        return String.join(" AND ", clauses);
     }
 
     private void fillPreparedStatement(SearchCriteria criteria, PreparedStatement ps) throws SQLException {
