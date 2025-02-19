@@ -39,11 +39,22 @@
   </section>
 </mat-tab-nav-panel>
 
+<!--<gio-save-bar-->
+<!--  class="gio-policy-studio-layout__save-bar"-->
+<!--  [opened]="isDirty"-->
+<!--  [creationMode]="false"-->
+<!--  (resetClicked)="onReset()"-->
+<!--  (submitted)="onSubmit()"-->
+<!--&gt;-->
+<!--</gio-save-bar>-->
 <gio-save-bar
   class="gio-policy-studio-layout__save-bar"
-  [opened]="this.isDirty"
   [creationMode]="false"
   (resetClicked)="onReset()"
   (submitted)="onSubmit()"
+  [form]="form"
+  [formInitialValues]="formInitialValues"
+  [opened]="isDirty"
+  [invalidState]="isSubmitting"
 >
 </gio-save-bar>

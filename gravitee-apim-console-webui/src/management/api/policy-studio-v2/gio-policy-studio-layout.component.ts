@@ -30,6 +30,7 @@ import { ApiV2Service } from '../../../services-ngx/api-v2.service';
 import { onlyApiV2Filter } from '../../../util/apiFilter.operator';
 import { ApiV2, PlanV2 } from '../../../entities/management-api-v2';
 import { ApiPlanV2Service } from '../../../services-ngx/api-plan-v2.service';
+import {FormControl, FormGroup} from "@angular/forms";
 
 interface MenuItem {
   label: string;
@@ -50,7 +51,12 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
     { label: 'Configuration', routerLink: of('config') },
   ];
   apiDefinition: ApiDefinition;
-  isDirty: boolean;
+  isDirty: boolean = false;
+  isSubmitting: boolean = false;
+  form: FormGroup<{ apiDefinition: FormControl<ApiDefinition> }>;
+  formInitialValues: {apiDefinition: ApiDefinition};
+
+  private initialApiDefinition: ApiDefinition;
 
   constructor(
     private readonly activatedRoute: ActivatedRoute,
@@ -63,38 +69,55 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.isDirty = false;
-    const debugLicense = { feature: ApimFeature.APIM_DEBUG_MODE, context: UTMTags.CONTEXT_API_V2 };
-    const notAllowed$ = this.gioLicenseService.isMissingFeature$(debugLicense.feature);
+    // console.log("in ng on init")
+    // const debugLicense = { feature: ApimFeature.APIM_DEBUG_MODE, context: UTMTags.CONTEXT_API_V2 };
+    // const notAllowed$ = this.gioLicenseService.isMissingFeature$(debugLicense.feature);
+    //
+    // this.policyStudioMenu = this.policyStudioMenu.filter((i) => i.label !== 'Debug');
+    // this.policyStudioMenu.push({
+    //   label: 'Debug',
+    //   routerLink: notAllowed$.pipe(map((notAllowed) => (notAllowed ? null : 'debug'))),
+    //   license: debugLicense,
+    //   notAllowed$,
+    // });
+    //
+    // combineLatest([
+    //   this.apiService.get(this.activatedRoute.snapshot.params.apiId).pipe(onlyApiV2Filter(this.snackBarService)),
+    //   this.apiPlanService.list(this.activatedRoute.snapshot.params.apiId, undefined, ['PUBLISHED', 'DEPRECATED'], undefined, 1, 9999),
+    // ])
+    //   .pipe(
+    //     switchMap(([api, plansResponse]) => {
+    //       console.log("got apis and plan ids")
+    //       const apiDefinition = this.toApiDefinition(api, plansResponse.data as PlanV2[]);
+    //
+    //       this.initialApiDefinition = apiDefinition;
+    //       this.apiDefinition = apiDefinition;
+    //       this.isDirty = false;
+    //
+    //       console.log("updating objects", apiDefinition, this.isDirty)
+    //
+    //       this.policyStudioService.setApiDefinition(this.initialApiDefinition);
+    //       return this.policyStudioService.getApiDefinitionToSave$();
+    //     }),
+    //     tap((apiDefinition) => {
+    //       this.onDefinitionChange(apiDefinition);
+    //     }),
+    //     takeUntil(this.unsubscribe$),
+    //   )
+    //   .subscribe();
 
-    this.policyStudioMenu = this.policyStudioMenu.filter((i) => i.label !== 'Debug');
-    this.policyStudioMenu.push({
-      label: 'Debug',
-      routerLink: notAllowed$.pipe(map((notAllowed) => (notAllowed ? null : 'debug'))),
-      license: debugLicense,
-      notAllowed$,
-    });
-
-    combineLatest([
-      this.apiService.get(this.activatedRoute.snapshot.params.apiId).pipe(onlyApiV2Filter(this.snackBarService)),
-      this.apiPlanService.list(this.activatedRoute.snapshot.params.apiId, undefined, ['PUBLISHED', 'DEPRECATED'], undefined, 1, 9999),
-    ])
-      .pipe(
-        tap(([api, plansResponse]) => {
-          this.policyStudioService.setApiDefinition(this.toApiDefinition(api, plansResponse.data as PlanV2[]));
-        }),
-        takeUntil(this.unsubscribe$),
-      )
-      .subscribe();
-    this.policyStudioService.getApiDefinitionToSave$().pipe(takeUntil(this.unsubscribe$)).subscribe(this.onDefinitionChange.bind(this));
+    this.initializeApiDefinition$().subscribe();
   }
 
   onDefinitionChange(apiDefinition: ApiDefinition) {
-    this.isDirty = true;
+    this.isDirty = !isEqual(apiDefinition, this.initialApiDefinition);
     this.apiDefinition = apiDefinition;
+    this.form.controls.apiDefinition.setValue(apiDefinition);
+    this.form.markAsDirty();
   }
 
   onSubmit() {
+    this.isSubmitting = true;
     const updatePlans$ = this.apiPlanService
       .list(this.activatedRoute.snapshot.params.apiId, undefined, ['PUBLISHED', 'DEPRECATED'], undefined, 1, 9999)
       .pipe(
@@ -128,13 +151,17 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
     combineLatest([updatePlans$, updateApi$])
       .pipe(
         tap(() => {
-          this.ngOnInit();
+          this.isDirty = false;
+
           this.snackBarService.success('Configuration successfully saved!');
+          this.isSubmitting = false;
         }),
         catchError(({ error }) => {
           this.snackBarService.error(error?.message ?? 'An error occurred while saving the configuration.');
+          this.isSubmitting = false;
           return EMPTY;
         }),
+        switchMap(() => this.initializeApiDefinition$()),
         takeUntil(this.unsubscribe$),
       )
       .subscribe();
@@ -150,6 +177,46 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
     const apiDefinition = toApiDefinition(api);
     const plansDefinition = toApiPlansDefinition(plans);
     return { ...apiDefinition, plans: plansDefinition };
+  }
+
+  private initializeApiDefinition$(): Observable<ApiDefinition> {
+    const debugLicense = { feature: ApimFeature.APIM_DEBUG_MODE, context: UTMTags.CONTEXT_API_V2 };
+    const notAllowed$ = this.gioLicenseService.isMissingFeature$(debugLicense.feature);
+
+    this.policyStudioMenu = this.policyStudioMenu.filter((i) => i.label !== 'Debug');
+    this.policyStudioMenu.push({
+      label: 'Debug',
+      routerLink: notAllowed$.pipe(map((notAllowed) => (notAllowed ? null : 'debug'))),
+      license: debugLicense,
+      notAllowed$,
+    });
+
+
+    return combineLatest([
+      this.apiService.get(this.activatedRoute.snapshot.params.apiId).pipe(onlyApiV2Filter(this.snackBarService)),
+      this.apiPlanService.list(this.activatedRoute.snapshot.params.apiId, undefined, ['PUBLISHED', 'DEPRECATED'], undefined, 1, 9999),
+    ])
+      .pipe(
+        switchMap(([api, plansResponse]) => {
+          const apiDefinition = this.toApiDefinition(api, plansResponse.data as PlanV2[]);
+
+          this.initialApiDefinition = apiDefinition;
+          this.apiDefinition = apiDefinition;
+          this.isDirty = false;
+
+          this.form = new FormGroup({
+            apiDefinition: new FormControl(apiDefinition)
+          })
+          this.formInitialValues = this.form.getRawValue();
+
+          this.policyStudioService.setApiDefinition(this.initialApiDefinition);
+          return this.policyStudioService.getApiDefinitionToSave$();
+        }),
+        tap((apiDefinition) => {
+          this.onDefinitionChange(apiDefinition);
+        }),
+        takeUntil(this.unsubscribe$),
+      );
   }
 
   ngOnDestroy(): void {
