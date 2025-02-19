@@ -16,10 +16,12 @@
 package io.gravitee.repository.management.api;
 
 import io.gravitee.common.data.domain.Page;
+import io.gravitee.common.utils.TimeProvider;
 import io.gravitee.repository.exceptions.TechnicalException;
 import io.gravitee.repository.management.api.search.Pageable;
 import io.gravitee.repository.management.api.search.builder.PageableBuilder;
 import io.gravitee.repository.management.model.AsyncJob;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,6 +29,8 @@ public interface AsyncJobRepository extends CrudRepository<AsyncJob, String> {
     Optional<AsyncJob> findPendingJobFor(String sourceId) throws TechnicalException;
 
     Page<AsyncJob> search(SearchCriteria criteria, Pageable pageable) throws TechnicalException;
+
+    void delay(String id, Date newDeadLine) throws TechnicalException;
 
     default Page<AsyncJob> search(SearchCriteria criteria) throws TechnicalException {
         return search(criteria, new PageableBuilder().pageSize(10).pageNumber(0).build());
@@ -41,4 +45,16 @@ public interface AsyncJobRepository extends CrudRepository<AsyncJob, String> {
     ) {}
 
     List<String> deleteByEnvironmentId(String environmentId) throws TechnicalException;
+
+    default AsyncJob handleDeadLine(AsyncJob job) throws TechnicalException {
+        if (!"PENDING".equalsIgnoreCase(job.getStatus())) {
+            return job;
+        } else if (job.isTimeout()) {
+            job.setUpdatedAt(Date.from(TimeProvider.instantNow()));
+            job.setStatus("TIMEOUT");
+            return update(job);
+        } else {
+            return job;
+        }
+    }
 }

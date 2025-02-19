@@ -19,12 +19,11 @@ import io.gravitee.common.data.domain.Page;
 import io.gravitee.repository.exceptions.TechnicalException;
 import io.gravitee.repository.management.api.AsyncJobRepository;
 import io.gravitee.repository.management.api.search.Pageable;
-import io.gravitee.repository.management.api.search.builder.PageableBuilder;
 import io.gravitee.repository.management.model.AsyncJob;
 import io.gravitee.repository.mongodb.management.internal.asyncjob.AsyncJobMongoRepository;
-import io.gravitee.repository.mongodb.management.internal.model.ApiMongo;
 import io.gravitee.repository.mongodb.management.internal.model.AsyncJobMongo;
 import io.gravitee.repository.mongodb.management.mapper.GraviteeMapper;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -89,8 +88,9 @@ public class MongoAsyncJobRepository implements AsyncJobRepository {
     }
 
     @Override
-    public Optional<AsyncJob> findPendingJobFor(String sourceId) {
-        return internalRepository.findPendingJobFor(sourceId).map(source -> mapper.map(source));
+    public Optional<AsyncJob> findPendingJobFor(String sourceId) throws TechnicalException {
+        var job = internalRepository.findPendingJobFor(sourceId).map(source -> mapper.map(source));
+        return job.isPresent() ? Optional.of(handleDeadLine(job.get())) : job;
     }
 
     @Override
@@ -99,6 +99,13 @@ public class MongoAsyncJobRepository implements AsyncJobRepository {
         var result = internalRepository.search(criteria, pageable);
         log.debug("Search by [{}] - Done", criteria);
         return result.map(source -> mapper.map(source));
+    }
+
+    @Override
+    public void delay(String id, Date newDeadLine) {
+        log.debug("Delay asyncJob [{}]", id);
+        internalRepository.delay(id, newDeadLine);
+        log.debug("Delay asyncJob [{}] - Done", id);
     }
 
     @Override

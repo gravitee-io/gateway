@@ -15,7 +15,9 @@
  */
 package io.gravitee.repository.management.model;
 
+import io.gravitee.common.utils.TimeProvider;
 import java.util.Date;
+import javax.annotation.Nullable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,8 +38,15 @@ public class AsyncJob {
     Date createdAt;
     Date updatedAt;
 
+    @Nullable
+    Date deadLine;
+
     String status;
     String errorMessage;
 
     Long upperLimit;
+
+    public boolean isTimeout() {
+        return deadLine != null && deadLine.before(Date.from(TimeProvider.instantNow()));
+    }
 }
