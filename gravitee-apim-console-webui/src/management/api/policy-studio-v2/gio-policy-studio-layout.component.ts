@@ -50,7 +50,9 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
     { label: 'Configuration', routerLink: of('config') },
   ];
   apiDefinition: ApiDefinition;
-  isDirty: boolean;
+  isDirty: boolean = false;
+
+  private initialApiDefinition: ApiDefinition;
 
   constructor(
     private readonly activatedRoute: ActivatedRoute,
@@ -63,7 +65,6 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.isDirty = false;
     const debugLicense = { feature: ApimFeature.APIM_DEBUG_MODE, context: UTMTags.CONTEXT_API_V2 };
     const notAllowed$ = this.gioLicenseService.isMissingFeature$(debugLicense.feature);
 
@@ -80,17 +81,26 @@ export class GioPolicyStudioLayoutComponent implements OnInit, OnDestroy {
       this.apiPlanService.list(this.activatedRoute.snapshot.params.apiId, undefined, ['PUBLISHED', 'DEPRECATED'], undefined, 1, 9999),
     ])
       .pipe(
-        tap(([api, plansResponse]) => {
-          this.policyStudioService.setApiDefinition(this.toApiDefinition(api, plansResponse.data as PlanV2[]));
+        switchMap(([api, plansResponse]) => {
+          const apiDefinition = this.toApiDefinition(api, plansResponse.data as PlanV2[]);
+
+          this.initialApiDefinition = apiDefinition;
+          this.apiDefinition = apiDefinition;
+          this.isDirty = false;
+
+          this.policyStudioService.setApiDefinition(this.initialApiDefinition);
+          return this.policyStudioService.getApiDefinitionToSave$();
+        }),
+        tap((apiDefinition) => {
+          this.onDefinitionChange(apiDefinition);
         }),
         takeUntil(this.unsubscribe$),
       )
       .subscribe();
-    this.policyStudioService.getApiDefinitionToSave$().pipe(takeUntil(this.unsubscribe$)).subscribe(this.onDefinitionChange.bind(this));
   }
 
   onDefinitionChange(apiDefinition: ApiDefinition) {
-    this.isDirty = true;
+    this.isDirty = !isEqual(apiDefinition, this.initialApiDefinition);
     this.apiDefinition = apiDefinition;
   }
 
